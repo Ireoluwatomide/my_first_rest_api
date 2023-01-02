@@ -44,7 +44,7 @@ def create_room():
 
 @app.post("/api/temperature")
 def add_temp():
-    data = request.json()
+    data = request.get_json()
     temperature = data["temperature"]
     room_id = data["room"]
     try: 
@@ -57,6 +57,17 @@ def add_temp():
             cursor.execute(CREATE_TEMPS_TABLE)
             cursor.execute(INSERT_TEMP, (room_id, temperature, date,))
     
-    return {"message:  Temperature Added"}, 201
+    return {"message": "Temperature Added"}, 201
+
+@app.get("/api/average")
+def get_global_avg():
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(GLOBAL_AVG)
+            average = cursor.fetchone()[0]
+            cursor.execute(GLOBAL_NUMBER_OF_DAYS)
+            days = cursor.fetchone()[0]
+            
+    return {"average": round(average, 2), "days": days}
     
 
