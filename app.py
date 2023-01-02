@@ -1,5 +1,6 @@
 import os
 import psycopg2
+from datetime import datetime, timezone
 from flask import Flask, request
 from dotenv import load_dotenv
 
@@ -32,6 +33,7 @@ connection = psycopg2.connect(url)
 def create_room():
     data = request.get_json() 
     name = data["name"]
+    
     with connection:
         with connection.cursor() as cursor:
             cursor.execute(CREATE_ROOMS_TABLE)
@@ -39,4 +41,22 @@ def create_room():
             room_id = cursor.fetchone()[0]
             
     return {"id": room_id, "message": f"Room {name} created."}, 201
+
+@app.post("/api/temperature")
+def add_temp():
+    data = request.json()
+    temperature = data["temperature"]
+    room_id = data["room"]
+    try: 
+        date = datetime.strptime(data["date"], "%m-%d-%Y %H:%M:%S")
+    except KeyError:
+        date = datetime.now(timezone.utc)
+        
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(CREATE_TEMPS_TABLE)
+            cursor.execute(INSERT_TEMP, (room_id, temperature, date,))
+    
+    return {"message:  Temperature Added"}, 201
+    
 
