@@ -17,9 +17,24 @@ INSERT_TEMP = (
     "INSERT INTO temperatures (room_id, temperature, date) VALUES (%s, %s, %s);"
 )
 
+ROOM_NAME = """SELECT name FROM rooms WHERE id = (%s)"""
+
+ROOM_TERM = """SELECT DATE(temperatures.date) as reading_date,
+AVG(temperatures.temperature)
+FROM temperatures
+WHERE temperatures.room_id = (%s)
+GROUP BY reading_date
+HAVING DATE(temperatures.date) > (SELECT MAX(DATE(temperatures.date))-(%s) FROM temperatures);"""
+
+ROOM_ALL_TIME_AVG = (
+    "SELECT AVG(temperature) as average FROM temperatures WHERE room_id = (%s);"
+)
+
 GLOBAL_NUMBER_OF_DAYS = (
     """SELECT COUNT(DISTINCT DATE(date)) AS days FROM temperatures;"""
 )
+
+ROOM_NUMBER_OF_DAYS = """SELECT COUNT(DISTINCT DATE(date)) AS days FROM temperatures WHERE room_id = (%s);"""
 
 GLOBAL_AVG = """SELECT AVG(temperature) as average FROM temperatures;"""
 
@@ -42,6 +57,7 @@ def create_room():
             
     return {"id": room_id, "message": f"Room {name} created."}, 201
 
+
 @app.post("/api/temperature")
 def add_temp():
     data = request.get_json()
@@ -58,6 +74,41 @@ def add_temp():
             cursor.execute(INSERT_TEMP, (room_id, temperature, date,))
     
     return {"message": "Temperature Added"}, 201
+
+
+def get_room_term(room_id, term):
+    terms = {"week": 7, "month": 30}
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(ROOM_NAME, (room_id,))
+            name = cursor.fetchone()[0]
+            cursor.execute(ROOM_TERM, (room_id, terms[term]))
+            dates_temperatures = cursor.fetchall()
+    average = sum(day[1] for day in dates_temperatures) / len(dates_temperatures)
+    return {
+        "name": name,
+        "temperatures": dates_temperatures,
+        "average": round(average, 2),
+    }
+
+
+@app.get("/api/room/<int:room_id>")
+def get_room_all(room_id):
+    args = request.args
+    term = args.get("term")
+    if term is not None:
+        return get_room_term(room_id, term)
+    else:
+        with connection:
+            with connection.cursor() as cursor:
+                cursor.execute(ROOM_NAME, (room_id,))
+                name = cursor.fetchone()[0]
+                cursor.execute(ROOM_ALL_TIME_AVG, (room_id,))
+                average = cursor.fetchone()[0]
+                cursor.execute(ROOM_NUMBER_OF_DAYS, (room_id,))
+                days = cursor.fetchone()[0]
+        return {"name": name, "average": round(average, 2), "days": days}
+
 
 @app.get("/api/average")
 def get_global_avg():
